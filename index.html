@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#060a12">
+<title>Elmo AI</title>
+<link rel="manifest" href="manifest.json">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --bg:#060a12;
+  --bg2:#0b1220;
+  --bg3:#111827;
+  --border:rgba(255,255,255,0.07);
+  --border2:rgba(255,255,255,0.12);
+  --teal:#00d4c8;
+  --teal2:#00b8ad;
+  --gold:#c9a84c;
+  --gold2:#e8c96a;
+  --text:#e8edf5;
+  --muted:rgba(232,237,245,0.45);
+  --user-bg:rgba(0,212,200,0.1);
+  --ai-bg:rgba(255,255,255,0.04);
+}
+
+html,body{height:100%;overflow:hidden;}
+body{
+  font-family:'Syne',sans-serif;
+  background:var(--bg);
+  color:var(--text);
+  display:flex;
+  flex-direction:column;
+}
+
+/* ── NOISE TEXTURE ── */
+body::before{
+  content:'';
+  position:fixed;
+  inset:0;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+  pointer-events:none;
+  z-index:0;
+  opacity:0.6;
+}
+
+/* ── LOGIN SCREEN ── */
+#login-screen{
+  position:fixed;inset:0;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  background:var(--bg);
+  z-index:1000;
+  padding:32px;
+}
+.login-glow{
+  position:absolute;
+  top:30%;left:50%;
+  transform:translate(-50%,-50%);
+  width:400px;height:400px;
+  background:radial-gradient(circle,rgba(0,212,200,0.08) 0%,transparent 70%);
+  pointer-events:none;
+}
+.login-logo{
+  font-size:3.5rem;
+  font-weight:800;
+  letter-spacing:-0.04em;
+  margin-bottom:6px;
+  background:linear-gradient(135deg,var(--teal),var(--gold));
+  -webkit-background-clip:text;
+  -webkit-text-fill-color:transparent;
+  background-clip:text;
+  position:relative;
+  z-index:1;
+}
+.login-sub{
+  font-size:0.78rem;
+  color:var(--muted);
+  letter-spacing:0.2em;
+  text-transform:uppercase;
+  margin-bottom:48px;
+  position:relative;z-index:1;
+}
+.login-box{
+  width:100%;
+  max-width:340px;
+  position:relative;z-index:1;
+}
+.login-input{
+  width:100%;
+  background:var(--bg3);
+  border:1px solid var(--border2);
+  color:var(--text);
+  padding:14px 18px;
+  border-radius:10px;
+  font-size:1rem;
+  font-family:'JetBrains Mono',monospace;
+  letter-spacing:0.1em;
+  outline:none;
+  margin-bottom:12px;
+  transition:border-color 0.2s;
+  text-align:center;
+}
+.login-input:focus{border-color:var(--teal);}
+.login-btn{
+  width:100%;
+  background:linear-gradient(135deg,var(--teal),var(--teal2));
+  border:none;
+  color:#060a12;
+  padding:14px;
+  border-radius:10px;
+  font-size:0.88rem;
+  font-weight:700;
+  font-family:'Syne',sans-serif;
+  letter-spacing:0.08em;
+  cursor:pointer;
+  transition:opacity 0.2s;
+}
+.login-btn:hover{opacity:0.88;}
+.login-err{color:#ff6b6b;font-size:0.78rem;text-align:center;margin-top:10px;display:none;}
+
+/* ── MAIN APP ── */
+#app{
+  display:none;
+  flex-direction:column;
+  height:100%;
+  position:relative;
+  z-index:1;
+}
+
+/* ── TOP BAR ── */
+.topbar{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:16px 20px;
+  border-bottom:1px solid var(--border);
+  flex-shrink:0;
+  background:rgba(6,10,18,0.8);
+  backdrop-filter:blur(12px);
+}
+.topbar-left{display:flex;align-items:center;gap:12px;}
+.ai-avatar{
+  width:36px;height:36px;
+  border-radius:10px;
+  background:linear-gradient(135deg,var(--teal),var(--gold));
+  display:flex;align-items:center;justify-content:center;
+  font-size:1rem;font-weight:800;color:#060a12;
+  flex-shrink:0;
+}
+.ai-name{font-size:1rem;font-weight:700;letter-spacing:-0.01em;}
+.ai-status{
+  display:flex;align-items:center;gap:5px;
+  font-size:0.7rem;color:var(--teal);font-family:'JetBrains Mono',monospace;
+}
+.status-dot{
+  width:6px;height:6px;border-radius:50%;
+  background:var(--teal);
+  animation:pulse 2s infinite;
+}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.4;}}
+
+.topbar-actions{display:flex;gap:6px;}
+.topbar-btn{
+  background:var(--bg3);
+  border:1px solid var(--border);
+  color:var(--muted);
+  padding:7px 12px;
+  border-radius:8px;
+  font-size:0.72rem;
+  cursor:pointer;
+  font-family:'Syne',sans-serif;
+  transition:all 0.2s;
+  white-space:nowrap;
+}
+.topbar-btn:hover{border-color:var(--border2);color:var(--text);}
+.topbar-btn.danger:hover{border-color:rgba(255,80,80,0.4);color:#ff6b6b;}
+
+/* ── QUICK ACTIONS ── */
+.quick-actions{
+  display:flex;
+  gap:8px;
+  padding:12px 20px;
+  border-bottom:1px solid var(--border);
+  overflow-x:auto;
+  flex-shrink:0;
+  scrollbar-width:none;
+}
+.quick-actions::-webkit-scrollbar{display:none;}
+.qa-btn{
+  background:var(--bg3);
+  border:1px solid var(--border);
+  color:var(--muted);
+  padding:6px 14px;
+  border-radius:99px;
+  font-size:0.75rem;
+  font-family:'Syne',sans-serif;
+  cursor:pointer;
+  white-space:nowrap;
+  transition:all 0.2s;
+  flex-shrink:0;
+}
+.qa-btn:hover{border-color:var(--teal);color:var(--teal);}
+
+/* ── CHAT AREA ── */
+.chat-area{
+  flex:1;
+  overflow-y:auto;
+  padding:24px 20px;
+  display:flex;
+  flex-direction:column;
+  gap:16px;
+  scrollbar-width:thin;
+  scrollbar-color:rgba(255,255,255,0.1) transparent;
+}
+
+/* WELCOME STATE */
+.welcome{
+  text-align:center;
+  padding:40px 20px;
+  max-width:500px;
+  margin:auto;
+}
+.welcome-icon{
+  font-size:3rem;
+  background:linear-gradient(135deg,var(--teal),var(--gold));
+  -webkit-background-clip:text;
+  -webkit-text-fill-color:transparent;
+  background-clip:text;
+  font-weight:800;
+  letter-spacing:-0.04em;
+  margin-bottom:12px;
+}
+.welcome h2{font-size:1.3rem;font-weight:700;margin-bottom:8px;}
+.welcome p{font-size:0.85rem;color:var(--muted);line-height:1.7;}
+
+/* MESSAGE BUBBLES */
+.msg{
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+  max-width:85%;
+  animation:msgIn 0.25s ease;
+}
+@keyframes msgIn{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
+.msg.user{align-self:flex-end;align-items:flex-end;}
+.msg.ai{align-self:flex-start;align-items:flex-start;}
+.msg-label{font-size:0.65rem;color:var(--muted);letter-spacing:0.08em;text-transform:uppercase;font-family:'JetBrains Mono',monospace;}
+.msg-bubble{
+  padding:14px 18px;
+  border-radius:16px;
+  font-size:0.88rem;
+  line-height:1.75;
+  white-space:pre-wrap;
+  word-break:break-word;
+}
+.msg.user .msg-bubble{
+  background:var(--user-bg);
+  border:1px solid rgba(0,212,200,0.2);
+  border-radius:16px 16px 4px 16px;
+  color:var(--text);
+}
+.msg.ai .msg-bubble{
+  background:var(--ai-bg);
+  border:1px solid var(--border);
+  border-radius:16px 16px 16px 4px;
+  color:var(--text);
+}
+.msg.ai .msg-bubble code{
+  font-family:'JetBrains Mono',monospace;
+  font-size:0.82em;
+  background:rgba(0,212,200,0.08);
+  padding:2px 6px;
+  border-radius:4px;
+  color:var(--teal);
+}
+.msg-actions{display:flex;gap:8px;margin-top:4px;}
+.msg-action{
+  background:none;border:none;
+  color:var(--muted);font-size:0.68rem;
+  cursor:pointer;font-family:'Syne',sans-serif;
+  padding:2px 8px;border-radius:4px;
+  transition:all 0.15s;
+}
+.msg-action:hover{background:var(--bg3);color:var(--text);}
+
+/* TYPING INDICATOR */
+.typing-indicator{
+  display:none;
+  align-self:flex-start;
+  padding:12px 18px;
+  background:var(--ai-bg);
+  border:1px solid var(--border);
+  border-radius:16px 16px 16px 4px;
+  gap:5px;
+  align-items:center;
+}
+.typing-indicator.show{display:flex;}
+.typing-dot{
+  width:6px;height:6px;border-radius:50%;
+  background:var(--teal);opacity:0.6;
+  animation:typing 1.2s infinite;
+}
+.typing-dot:nth-child(2){animation-delay:0.2s;}
+.typing-dot:nth-child(3){animation-delay:0.4s;}
+@keyframes typing{0%,60%,100%{transform:translateY(0);}30%{transform:translateY(-6px);}}
+
+/* ── INPUT AREA ── */
+.input-area{
+  padding:16px 20px;
+  border-top:1px solid var(--border);
+  flex-shrink:0;
+  background:rgba(6,10,18,0.8);
+  backdrop-filter:blur(12px);
+}
+.input-row{
+  display:flex;
+  gap:10px;
+  align-items:flex-end;
+  background:var(--bg3);
+  border:1px solid var(--border2);
+  border-radius:14px;
+  padding:10px 10px 10px 16px;
+  transition:border-color 0.2s;
+}
+.input-row:focus-within{border-color:var(--teal);}
+#chat-input{
+  flex:1;
+  background:none;
+  border:none;
+  color:var(--text);
+  font-size:0.9rem;
+  font-family:'Syne',sans-serif;
+  resize:none;
+  outline:none;
+  max-height:120px;
+  min-height:24px;
+  line-height:1.5;
+  scrollbar-width:none;
+}
+#chat-input::placeholder{color:var(--muted);}
+#chat-input::-webkit-scrollbar{display:none;}
+.send-btn{
+  background:linear-gradient(135deg,var(--teal),var(--teal2));
+  border:none;
+  width:38px;height:38px;
+  border-radius:10px;
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;
+  flex-shrink:0;
+  transition:opacity 0.2s;
+  color:#060a12;
+  font-size:1rem;
+}
+.send-btn:hover{opacity:0.85;}
+.send-btn:disabled{opacity:0.4;cursor:default;}
+.input-hint{
+  text-align:center;
+  font-size:0.65rem;
+  color:rgba(255,255,255,0.18);
+  margin-top:8px;
+  font-family:'JetBrains Mono',monospace;
+}
+
+/* ── MEMORY PANEL ── */
+.memory-panel{
+  display:none;
+  position:fixed;
+  top:0;right:0;bottom:0;
+  width:min(360px,100vw);
+  background:var(--bg2);
+  border-left:1px solid var(--border);
+  z-index:500;
+  flex-direction:column;
+  animation:slideIn 0.25s ease;
+}
+.memory-panel.open{display:flex;}
+@keyframes slideIn{from{transform:translateX(100%);}to{transform:translateX(0);}}
+.memory-header{
+  padding:20px;
+  border-bottom:1px solid var(--border);
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+}
+.memory-header h3{font-size:0.95rem;font-weight:700;}
+.close-btn{background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer;padding:4px;}
+.memory-content{flex:1;overflow-y:auto;padding:16px;}
+.memory-note{
+  font-size:0.78rem;
+  font-family:'JetBrains Mono',monospace;
+  color:var(--muted);
+  line-height:1.7;
+  background:var(--bg3);
+  border:1px solid var(--border);
+  border-radius:8px;
+  padding:12px;
+  margin-bottom:12px;
+  white-space:pre-wrap;
+}
+.memory-add{padding:16px;border-top:1px solid var(--border);}
+.memory-input{
+  width:100%;
+  background:var(--bg3);
+  border:1px solid var(--border2);
+  color:var(--text);
+  padding:10px 14px;
+  border-radius:8px;
+  font-size:0.82rem;
+  font-family:'Syne',sans-serif;
+  outline:none;
+  margin-bottom:8px;
+  resize:none;
+  height:72px;
+}
+.memory-input:focus{border-color:var(--teal);}
+.memory-save-btn{
+  width:100%;
+  background:var(--teal);
+  color:#060a12;
+  border:none;
+  padding:10px;
+  border-radius:8px;
+  font-weight:700;
+  font-family:'Syne',sans-serif;
+  cursor:pointer;
+  font-size:0.82rem;
+  transition:opacity 0.2s;
+}
+.memory-save-btn:hover{opacity:0.85;}
+
+/* PWA INSTALL */
+.install-btn{
+  display:none;
+  background:rgba(201,168,76,0.12);
+  border:1px solid rgba(201,168,76,0.3);
+  color:var(--gold);
+  padding:6px 14px;
+  border-radius:8px;
+  font-size:0.72rem;
+  cursor:pointer;
+  font-family:'Syne',sans-serif;
+}
+
+@media(max-width:480px){
+  .topbar-btn span{display:none;}
+  .msg{max-width:92%;}
+}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login-screen">
+  <div class="login-glow"></div>
+  <div class="login-logo">Elmo</div>
+  <div class="login-sub">Your Personal AI Partner</div>
+  <div class="login-box">
+    <input type="password" class="login-input" id="login-pass" placeholder="Enter password" autocomplete="current-password"/>
+    <button class="login-btn" onclick="doLogin()">Access Elmo →</button>
+    <div class="login-err" id="login-err">Incorrect password. Try again.</div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+
+  <div class="topbar">
+    <div class="topbar-left">
+      <div class="ai-avatar">E</div>
+      <div>
+        <div class="ai-name">Elmo</div>
+        <div class="ai-status"><div class="status-dot"></div><span id="status-text">Ready</span></div>
+      </div>
+    </div>
+    <div class="topbar-actions">
+      <button class="install-btn" id="install-btn" onclick="installPWA()">📱 Install App</button>
+      <button class="topbar-btn" onclick="toggleMemory()">🧠 <span>Memory</span></button>
+      <button class="topbar-btn" onclick="sendToTelegram()">📨 <span>Send</span></button>
+      <button class="topbar-btn danger" onclick="clearChat()">✕ <span>Clear</span></button>
+    </div>
+  </div>
+
+  <div class="quick-actions">
+    <button class="qa-btn" onclick="quickAsk('Draft a formal legal letter regarding Case 11/MS at Mahara District Court')">⚖ Case 11/MS</button>
+    <button class="qa-btn" onclick="quickAsk('What is the current status of my JSC complaint and what should my next step be?')">📋 JSC Complaint</button>
+    <button class="qa-btn" onclick="quickAsk('Help me write a buyer outreach email for Avero cocopeat grow bags to a European horticulture importer')">🌿 Avero Export</button>
+    <button class="qa-btn" onclick="quickAsk('Review my LexLK platform and suggest the next priority feature to build')">💻 LexLK Dev</button>
+    <button class="qa-btn" onclick="quickAsk('I need to draft a formal petition to the Judicial Service Commission. Guide me through what I need to include.')">📜 Draft Petition</button>
+    <button class="qa-btn" onclick="quickAsk('What are the strongest legal arguments I can make in my JSC complaint against Hon. Thanuja Jayasinha?')">🔍 Legal Research</button>
+    <button class="qa-btn" onclick="quickAsk('Help me plan my week and prioritise my tasks across my legal case, LexLK network and Avero business')">📅 Plan My Week</button>
+  </div>
+
+  <div class="chat-area" id="chat-area">
+    <div class="welcome">
+      <div class="welcome-icon">E</div>
+      <h2>Good to see you, Elmo.</h2>
+      <p>I know your cases, your businesses, your platforms and your goals. Ask me anything — I'm your partner, not just a tool.</p>
+    </div>
+    <div class="typing-indicator" id="typing">
+      <div class="typing-dot"></div>
+      <div class="typing-dot"></div>
+      <div class="typing-dot"></div>
+    </div>
+  </div>
+
+  <div class="input-area">
+    <div class="input-row">
+      <textarea id="chat-input" placeholder="Ask Elmo anything..." rows="1"></textarea>
+      <button class="send-btn" id="send-btn" onclick="sendMessage()">↑</button>
+    </div>
+    <div class="input-hint">Enter to send · Shift+Enter for new line · Your conversation stays private</div>
+  </div>
+
+</div>
+
+<!-- MEMORY PANEL -->
+<div class="memory-panel" id="memory-panel">
+  <div class="memory-header">
+    <h3>🧠 Elmo's Memory</h3>
+    <button class="close-btn" onclick="toggleMemory()">✕</button>
+  </div>
+  <div class="memory-content" id="memory-content">
+    <div class="memory-note">Loading memory...</div>
+  </div>
+  <div class="memory-add">
+    <textarea class="memory-input" id="memory-input" placeholder="Add something for Elmo to remember..."></textarea>
+    <button class="memory-save-btn" onclick="saveMemory()">Save to Memory →</button>
+  </div>
+</div>
+
+<script>
+const WORKER = 'https://elmo.acedynamicstrading.workers.dev';
+let password = '';
+let messages = [];
+let deferredInstall = null;
+
+// ── PWA INSTALL ──
+window.addEventListener('beforeinstallprompt', function(e) {
+  e.preventDefault();
+  deferredInstall = e;
+  document.getElementById('install-btn').style.display = 'block';
+});
+function installPWA() {
+  if (deferredInstall) { deferredInstall.prompt(); deferredInstall = null; }
+}
+
+// ── LOGIN ──
+document.getElementById('login-pass').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') doLogin();
+});
+
+async function doLogin() {
+  const pass = document.getElementById('login-pass').value.trim();
+  if (!pass) return;
+  try {
+    const resp = await fetch(WORKER, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'ping', password: pass })
+    });
+    const data = await resp.json();
+    if (data.ok || resp.status !== 401) {
+      password = pass;
+      document.getElementById('login-screen').style.display = 'none';
+      document.getElementById('app').style.display = 'flex';
+      localStorage.setItem('elmo_pass', pass);
+      greetUser();
+    } else {
+      showLoginErr();
+    }
+  } catch(e) {
+    // If worker not deployed yet, allow with hardcoded fallback
+    password = pass;
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app').style.display = 'flex';
+    greetUser();
+  }
+}
+
+function showLoginErr() {
+  const err = document.getElementById('login-err');
+  err.style.display = 'block';
+  document.getElementById('login-pass').value = '';
+  setTimeout(() => err.style.display = 'none', 3000);
+}
+
+// Auto-login if saved
+window.addEventListener('load', function() {
+  const saved = localStorage.getItem('elmo_pass');
+  if (saved) {
+    document.getElementById('login-pass').value = saved;
+    doLogin();
+  }
+});
+
+function greetUser() {
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+  addMessage('ai', `${greeting}, Elmo. I'm fully up to speed — your legal cases, your businesses, your platforms. What are we working on today?`);
+}
+
+// ── CHAT ──
+function addMessage(role, text, save = true) {
+  // Remove welcome screen on first message
+  const welcome = document.querySelector('.welcome');
+  if (welcome) welcome.remove();
+
+  const area = document.getElementById('chat-area');
+  const typing = document.getElementById('typing');
+
+  const div = document.createElement('div');
+  div.className = 'msg ' + role;
+
+  const label = document.createElement('div');
+  label.className = 'msg-label';
+  label.textContent = role === 'user' ? 'You' : 'Elmo';
+
+  const bubble = document.createElement('div');
+  bubble.className = 'msg-bubble';
+  // Basic markdown: code blocks, bold
+  bubble.innerHTML = text
+    .replace(/```([\s\S]*?)```/g, '<code>$1</code>')
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+
+  div.appendChild(label);
+  div.appendChild(bubble);
+
+  if (role === 'ai') {
+    const actions = document.createElement('div');
+    actions.className = 'msg-actions';
+    const copyBtn = document.createElement('button');
+    copyBtn.className = 'msg-action';
+    copyBtn.textContent = 'Copy';
+    copyBtn.onclick = function() {
+      navigator.clipboard.writeText(text).then(() => { copyBtn.textContent = '✓ Copied'; setTimeout(() => copyBtn.textContent = 'Copy', 2000); });
+    };
+    const saveBtn = document.createElement('button');
+    saveBtn.className = 'msg-action';
+    saveBtn.textContent = 'Remember this';
+    saveBtn.onclick = function() { rememberMessage(text); saveBtn.textContent = '✓ Saved'; setTimeout(() => saveBtn.textContent = 'Remember this', 2000); };
+    actions.appendChild(copyBtn);
+    actions.appendChild(saveBtn);
+    div.appendChild(actions);
+  }
+
+  area.insertBefore(div, typing);
+  area.scrollTop = area.scrollHeight;
+
+  if (save) {
+    messages.push({ role: role === 'user' ? 'user' : 'assistant', content: text });
+    // Keep last 30 messages for context
+    if (messages.length > 30) messages = messages.slice(-30);
+  }
+}
+
+function setStatus(text, active = false) {
+  document.getElementById('status-text').textContent = text;
+  document.querySelector('.status-dot').style.background = active ? '#ffaa00' : 'var(--teal)';
+}
+
+async function sendMessage() {
+  const input = document.getElementById('chat-input');
+  const text = input.value.trim();
+  if (!text) return;
+
+  input.value = '';
+  input.style.height = 'auto';
+  addMessage('user', text);
+
+  const typing = document.getElementById('typing');
+  typing.classList.add('show');
+  document.getElementById('send-btn').disabled = true;
+  setStatus('Thinking...', true);
+
+  try {
+    const resp = await fetch(WORKER, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'chat', password, messages })
+    });
+    const data = await resp.json();
+    typing.classList.remove('show');
+    if (data.text) {
+      addMessage('ai', data.text);
+      setStatus('Ready');
+    } else {
+      addMessage('ai', '⚠ Something went wrong: ' + (data.error || 'Unknown error'));
+      setStatus('Error');
+    }
+  } catch(e) {
+    typing.classList.remove('show');
+    addMessage('ai', '⚠ Cannot reach worker. Check your connection or deploy the worker.');
+    setStatus('Offline');
+  }
+  document.getElementById('send-btn').disabled = false;
+  document.getElementById('chat-area').scrollTop = document.getElementById('chat-area').scrollHeight;
+}
+
+function quickAsk(text) {
+  document.getElementById('chat-input').value = text;
+  sendMessage();
+}
+
+// Enter to send
+document.getElementById('chat-input').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+});
+
+// Auto-resize textarea
+document.getElementById('chat-input').addEventListener('input', function() {
+  this.style.height = 'auto';
+  this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+});
+
+function clearChat() {
+  if (!confirm('Clear this conversation?')) return;
+  messages = [];
+  const area = document.getElementById('chat-area');
+  area.innerHTML = '<div class="welcome"><div class="welcome-icon">E</div><h2>Conversation cleared.</h2><p>Start fresh whenever you\'re ready.</p></div><div class="typing-indicator" id="typing"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>';
+  setStatus('Ready');
+}
+
+// Send last AI response to Telegram
+async function sendToTelegram() {
+  const lastAI = [...messages].reverse().find(m => m.role === 'assistant');
+  if (!lastAI) { alert('No AI response to send yet.'); return; }
+  try {
+    await fetch(WORKER, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'notify', password, message: lastAI.content.slice(0, 3000) })
+    });
+    alert('✓ Sent to Telegram');
+  } catch(e) { alert('Could not send to Telegram'); }
+}
+
+// ── MEMORY ──
+async function toggleMemory() {
+  const panel = document.getElementById('memory-panel');
+  panel.classList.toggle('open');
+  if (panel.classList.contains('open')) loadMemory();
+}
+
+async function loadMemory() {
+  try {
+    const resp = await fetch(WORKER, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'getMemory', password })
+    });
+    const data = await resp.json();
+    const el = document.getElementById('memory-content');
+    el.innerHTML = '<div class="memory-note">' + (data.memory || 'No memory notes yet.') + '</div>';
+  } catch(e) {
+    document.getElementById('memory-content').innerHTML = '<div class="memory-note">Could not load memory.</div>';
+  }
+}
+
+async function saveMemory() {
+  const note = document.getElementById('memory-input').value.trim();
+  if (!note) return;
+  try {
+    await fetch(WORKER, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'remember', password, note })
+    });
+    document.getElementById('memory-input').value = '';
+    loadMemory();
+  } catch(e) { alert('Could not save memory'); }
+}
+
+async function rememberMessage(text) {
+  const note = text.slice(0, 500);
+  try {
+    await fetch(WORKER, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'remember', password, note: '[AI Output] ' + note })
+    });
+  } catch(e) {}
+}
+</script>
+</body>
+</html>
