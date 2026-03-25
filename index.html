@@ -540,6 +540,36 @@ let password = '';
 let messages = [];
 let deferredInstall = null;
 
+/** Fetch worker; never throws. Network/CORS failures return ok:false. */
+async function workerRequest(payload) {
+  try {
+    const resp = await fetch(WORKER, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      cache: 'no-store'
+    });
+    const text = await resp.text();
+    let data = {};
+    if (text) {
+      try {
+        data = JSON.parse(text);
+      } catch (_) {
+        data = { error: 'Server returned non-JSON', detail: text.slice(0, 180) };
+      }
+    }
+    return { ok: true, resp, data };
+  } catch (_) {
+    return { ok: false };
+  }
+}
+
+function fileProtocolHint() {
+  return location.protocol === 'file:'
+    ? ' You are using a file:// page — many browsers block API calls. Run a local server in the ElmoAI folder (double-click serve-local.ps1 or run: python -m http.server 8765) and open http://localhost:8765'
+    : ' Check your connection, VPN, firewall, or ad-blockers blocking *.workers.dev.';
+}
+
 // ── PWA INSTALL ──
 window.addEventListener('beforeinstallprompt', function(e) {
   e.preventDefault();
@@ -559,31 +589,23 @@ async function doLogin() {
   const pass = document.getElementById('login-pass').value.trim();
   if (!pass) return;
   const errEl = document.getElementById('login-err');
-  try {
-    // Use getMemory — worker's ping accepts any password; chat/memory enforce the real secret.
-    const resp = await fetch(WORKER, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'getMemory', password: pass })
-    });
-    let data = {};
-    try {
-      data = await resp.json();
-    } catch (_) {}
-    if (resp.ok && !data.error) {
-      password = pass;
-      document.getElementById('login-screen').style.display = 'none';
-      document.getElementById('app').style.display = 'flex';
-      localStorage.setItem('elmo_pass', pass);
-      greetUser();
-    } else {
-      errEl.textContent = 'Incorrect password. Try again.';
-      showLoginErr();
-    }
-  } catch (e) {
-    errEl.textContent = 'Cannot reach the server. Check your connection.';
+  // Use getMemory — worker's ping accepts any password; chat/memory enforce the real secret.
+  const { ok, resp, data } = await workerRequest({ action: 'getMemory', password: pass });
+  if (!ok) {
+    errEl.textContent = 'Cannot reach the server.' + fileProtocolHint();
     errEl.style.display = 'block';
-    setTimeout(() => { errEl.style.display = 'none'; }, 4000);
+    setTimeout(() => { errEl.style.display = 'none'; }, 6000);
+    return;
+  }
+  if (resp.ok && !data.error) {
+    password = pass;
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app').style.display = 'flex';
+    localStorage.setItem('elmo_pass', pass);
+    greetUser();
+  } else {
+    errEl.textContent = 'Incorrect password. Try again.';
+    showLoginErr();
   }
 }
 
@@ -682,25 +704,18 @@ async function sendMessage() {
   document.getElementById('send-btn').disabled = true;
   setStatus('Thinking...', true);
 
-  try {
-    const resp = await fetch(WORKER, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'chat', password, messages })
-    });
-    const data = await resp.json();
-    typing.classList.remove('show');
-    if (data.text) {
-      addMessage('ai', data.text);
-      setStatus('Ready');
-    } else {
-      addMessage('ai', '⚠ Something went wrong: ' + (data.error || 'Unknown error'));
-      setStatus('Error');
-    }
-  } catch(e) {
-    typing.classList.remove('show');
-    addMessage('ai', '⚠ Cannot reach worker. Check your connection or deploy the worker.');
+  const { ok, resp, data } = await workerRequest({ action: 'chat', password, messages });
+  typing.classList.remove('show');
+  if (!ok) {
+    addMessage('ai', '⚠ Cannot reach the API.' + fileProtocolHint());
     setStatus('Offline');
+  } else if (data.text) {
+    addMessage('ai', data.text);
+    setStatus('Ready');
+  } else {
+    const detail = data.detail ? ' (' + data.detail + ')' : '';
+    addMessage('ai', '⚠ Something went wrong: ' + (data.error || resp.status + ' ' + resp.statusText) + detail);
+    setStatus('Error');
   }
   document.getElementById('send-btn').disabled = false;
   document.getElementById('chat-area').scrollTop = document.getElementById('chat-area').scrollHeight;
@@ -734,14 +749,9 @@ function clearChat() {
 async function sendToTelegram() {
   const lastAI = [...messages].reverse().find(m => m.role === 'assistant');
   if (!lastAI) { alert('No AI response to send yet.'); return; }
-  try {
-    await fetch(WORKER, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'notify', password, message: lastAI.content.slice(0, 3000) })
-    });
-    alert('✓ Sent to Telegram');
-  } catch(e) { alert('Could not send to Telegram'); }
+  const n = await workerRequest({ action: 'notify', password, message: lastAI.content.slice(0, 3000) });
+  if (n.ok && n.resp.ok && !n.data.error) alert('✓ Sent to Telegram');
+  else alert('Could not send to Telegram.' + (!n.ok ? fileProtocolHint() : ''));
 }
 
 // ── MEMORY ──
@@ -752,43 +762,30 @@ async function toggleMemory() {
 }
 
 async function loadMemory() {
-  try {
-    const resp = await fetch(WORKER, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'getMemory', password })
-    });
-    const data = await resp.json();
-    const el = document.getElementById('memory-content');
-    el.innerHTML = '<div class="memory-note">' + (data.memory || 'No memory notes yet.') + '</div>';
-  } catch(e) {
-    document.getElementById('memory-content').innerHTML = '<div class="memory-note">Could not load memory.</div>';
+  const { ok, data } = await workerRequest({ action: 'getMemory', password });
+  const el = document.getElementById('memory-content');
+  if (!ok) {
+    el.innerHTML = '<div class="memory-note">Could not load memory.' + fileProtocolHint() + '</div>';
+    return;
   }
+  el.innerHTML = '<div class="memory-note">' + (data.memory || 'No memory notes yet.') + '</div>';
 }
 
 async function saveMemory() {
   const note = document.getElementById('memory-input').value.trim();
   if (!note) return;
-  try {
-    await fetch(WORKER, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'remember', password, note })
-    });
+  const r = await workerRequest({ action: 'remember', password, note });
+  if (r.ok && r.resp.ok && !r.data.error) {
     document.getElementById('memory-input').value = '';
     loadMemory();
-  } catch(e) { alert('Could not save memory'); }
+  } else {
+    alert('Could not save memory.' + (!r.ok ? fileProtocolHint() : ''));
+  }
 }
 
 async function rememberMessage(text) {
   const note = text.slice(0, 500);
-  try {
-    await fetch(WORKER, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'remember', password, note: '[AI Output] ' + note })
-    });
-  } catch(e) {}
+  await workerRequest({ action: 'remember', password, note: '[AI Output] ' + note });
 }
 </script>
 </body>
