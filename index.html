@@ -535,7 +535,7 @@ body::before{
 </div>
 
 <script>
-const WORKER = 'https://elmo.acedynamicstrading.workers.dev';
+const WORKER = 'https://elmoaiworker.acedynamicstrading.workers.dev';
 let password = '';
 let messages = [];
 let deferredInstall = null;
@@ -558,28 +558,32 @@ document.getElementById('login-pass').addEventListener('keydown', function(e) {
 async function doLogin() {
   const pass = document.getElementById('login-pass').value.trim();
   if (!pass) return;
+  const errEl = document.getElementById('login-err');
   try {
+    // Use getMemory — worker's ping accepts any password; chat/memory enforce the real secret.
     const resp = await fetch(WORKER, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'ping', password: pass })
+      body: JSON.stringify({ action: 'getMemory', password: pass })
     });
-    const data = await resp.json();
-    if (data.ok || resp.status !== 401) {
+    let data = {};
+    try {
+      data = await resp.json();
+    } catch (_) {}
+    if (resp.ok && !data.error) {
       password = pass;
       document.getElementById('login-screen').style.display = 'none';
       document.getElementById('app').style.display = 'flex';
       localStorage.setItem('elmo_pass', pass);
       greetUser();
     } else {
+      errEl.textContent = 'Incorrect password. Try again.';
       showLoginErr();
     }
-  } catch(e) {
-    // If worker not deployed yet, allow with hardcoded fallback
-    password = pass;
-    document.getElementById('login-screen').style.display = 'none';
-    document.getElementById('app').style.display = 'flex';
-    greetUser();
+  } catch (e) {
+    errEl.textContent = 'Cannot reach the server. Check your connection.';
+    errEl.style.display = 'block';
+    setTimeout(() => { errEl.style.display = 'none'; }, 4000);
   }
 }
 
