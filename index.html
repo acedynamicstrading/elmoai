@@ -896,7 +896,7 @@ async function send() {
   typing.classList.add('show');
   document.getElementById('send-btn').disabled = true;
   setStatus(files.length ? 'Reading files...' : searchOn ? 'Searching...' : 'Thinking...', 'busy');
-  const { ok, r, d } = await api({ action: 'chat', password: pw, messages: msgs, forceSearch: searchOn, files });
+  const { ok, r, d } = await api({ action: 'chat', password: pw, messages: msgs, forceSearch: searchOn, files, groqKeys });
   typing.classList.remove('show');
   document.getElementById('send-btn').disabled = false;
   if (!ok) { addMsg('ai', '⚠ Cannot reach server. Check connection.'); setStatus('Offline', 'error'); return; }
